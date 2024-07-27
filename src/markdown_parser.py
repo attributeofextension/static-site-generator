@@ -59,6 +59,8 @@ class NestedRule(MarkdownRule):
             return TextNode(text[1:-1], "italic", None, text)
         elif text.startswith("`"):
             return TextNode(text[1:-1], "code", None, text)
+        elif text.startswith("[link]"):
+            return TextNode(text[2:-1], "link", None, text)
         else:
             return TextNode(text, "text", None, text)
 
@@ -71,6 +73,11 @@ class NestedRule(MarkdownRule):
                 re.compile(r"\!\[.*?\]\(.*?\.(jpg|gif|jpeg|png)\)"),
                 re.compile(r"\!\[.*?\]"),
                 re.compile(r"\(.*?\.(jpg|gif|jpeg|png)\)")
+            ],
+            "[": [
+                re.compile(r"\[.*?\]\(.*?\)"),
+                re.compile(r"\[.*?\]"),
+                re.compile(r"\(.*?\)"),
             ]
         }
         match = None
@@ -91,7 +98,7 @@ class NestedRule(MarkdownRule):
                     return list(map(self.__mapping_function, list(filter(lambda x: len(x) > 0, [
                         text[0:i],
                         text[i:i+len(match[0])],
-                        text[len(match[0]):]
+                        text[i+len(match[0]):]
                     ]))))
                 else:
                     continue
@@ -101,8 +108,20 @@ class NestedRule(MarkdownRule):
                     return list(map(self.__mapping_function, list(filter(lambda x: len(x) > 0, [
                         text[0:i],
                         text[i:i+len(match[0])],
-                        text[len(match[0]):]
+                        text[i+len(match[0]):]
                     ]))))
+                else:
+                    continue
+            elif text[i:].startswith("["):
+                match = re.match(lookup["["][0], text[i:])
+                if match is not None:
+                    link_text = re.search(lookup["["][1], match[0])
+                    url = re.search(lookup["["][2], match[0])
+                    return list(filter(lambda x: len(x.text) > 0, [
+                        TextNode(text[0:i], "text", None, text[0:i]),
+                        TextNode(link_text[0][1:-1], "link", url[0][1:-1], match[0]),
+                        TextNode(text[i+len(match[0]):], "text", None, text[len(match[0]):])
+                    ]))
                 else:
                     continue
             elif text[i:].startswith("!"):
@@ -138,6 +157,25 @@ class MarkdownParser():
         else:
             return self.start_of_line_rule.apply(line)
 
+    def __search_for_text_node_with_children_and_replace_with_children(self, text_node: TextNode) -> list[TextNode]:
+        if isinstance(text_node, str):
+            raise ValueError(f"Unexpected unprocessed string: {text_node}")
+        if len(text_node.children) > 0:
+            children_copy = list(text_node.children)
+            for i in range(0, len(text_node.children)):
+                grandchildren = self.__search_for_text_node_with_children_and_replace_with_children(text_node.children[i])
+                if len(grandchildren) > 1:
+                    children_copy = children_copy[:i] + grandchildren + children_copy[i+1:]
+            text_node.children = children_copy
+
+            if text_node.text_type == "text":
+                return text_node.children
+            else:
+                return [text_node]
+        else:
+            return [text_node]
+
+
     def __expand_text_node(self, text_node: TextNode) -> TextNode:
         children = self.nested_rule.apply(text_node.text)
         if len(children) == 1 and children[0].text == text_node.text:
@@ -160,4 +198,14 @@ class MarkdownParser():
             else:
                 raise ValueError(f"Unexpected unprocessed string: {text_node}")
 
-        return text_nodes
+        text_nodes_copy = list(text_nodes)
+        for i in range(0, len(text_nodes)):
+            if isinstance(text_nodes_copy[i], str):
+                raise ValueError(f"Unexpected unprocessed string: {text_nodes_copy[i]}")
+
+            if isinstance(text_nodes[i], TextNode):
+                potential_split = self.__search_for_text_node_with_children_and_replace_with_children(text_node)
+                if len(potential_split) > 1:
+                    text_nodes_copy = text_nodes_copy[:i] + potential_split + text_nodes_copy[i+1:]
+
+        return text_nodes_copy
