@@ -14,7 +14,7 @@ def text_node_to_html_node(text_node):
 
 def main():
     print("hello world")
-    textnode = TextNode("This is a text node", "bold", "https://www.boot.dev")
+    textnode = TextNode("This is a text node", "bold", "https://www.boot.dev", "This is a text node")
     print(textnode)
 
 main()

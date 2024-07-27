@@ -7,13 +7,13 @@ from htmlnode import LeafNode
 
 class TestTextNodeToHTML(unittest.TestCase):
     def setUp(self):
-        self.text_type_text_node = TextNode("raw text", "text","not shown")
-        self.text_type_bold_node = TextNode("bold text", "bold", "not shown")
-        self.text_type_italic_node = TextNode("italic text", "italic", "not shown")
-        self.text_type_code_node = TextNode("code text", "code", "not shown")
-        self.text_type_link_node = TextNode("link text", "link", "shown in href prop")
-        self.text_type_image_node = TextNode("shown in alt prop", "image", "shown in src prop")
-        self.text_type_script_node = TextNode("raises exception", "script", "not shown")
+        self.text_type_text_node = TextNode("raw text", "text","not shown", "raw text")
+        self.text_type_bold_node = TextNode("bold text", "bold", "not shown", "**bold text**")
+        self.text_type_italic_node = TextNode("italic text", "italic", "not shown", "*italic text*")
+        self.text_type_code_node = TextNode("code text", "code", "not shown", "`code text`")
+        self.text_type_link_node = TextNode("link text", "link", "shown in href prop", "link text")
+        self.text_type_image_node = TextNode("shown in alt prop", "image", "shown in src prop", "image text")
+        self.text_type_script_node = TextNode("raises exception", "script", "not shown", "raises exception")
 
     def test_text_type_text(self):
         node = text_node_to_html_node(self.text_type_text_node)
