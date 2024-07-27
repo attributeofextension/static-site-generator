@@ -11,6 +11,15 @@ class PerListRule():
     def apply_to_list(self, text_nodes_and_strings: list[TextNode|str]) -> list[TextNode|str]:
         pass
 
+class SanitizeRule(PerStringRule):
+    def apply(self, text: str) -> list[TextNode|str]:
+        regex_open = re.compile(r"<.*?script*.?>")
+        regex_close = re.compile(r"</.*?script.*?>")
+
+        sanitized_text = regex_open.sub("", text)
+        sanitized_text = regex_close.sub("", sanitized_text)
+
+        return [sanitized_text]
 
 
 # breaks markdown into either chunks or lines or code segments
@@ -184,6 +193,7 @@ class NestedRule(PerStringRule):
 
 class MarkdownParser():
     def __init__(self):
+        self.sanitize_rule = SanitizeRule()
         self.block_rule = BreakPerStringIntoBlocksRule()
         self.line_rule = BreakBlocksIntoLinesRule()
         self.group_ol_items_rule = GroupListItemIntoBlocksRule("ol-item", "ol")
@@ -231,7 +241,8 @@ class MarkdownParser():
             return text_node
 
     def parse(self, text: str):
-        text_nodes: list[TextNode|str] = self.block_rule.apply(text)
+        sanitized_text = self.sanitize_rule.apply(text)[0]
+        text_nodes: list[TextNode|str] = self.block_rule.apply(sanitized_text)
         text_nodes = list(reduce(lambda a,b: a + b, list(map(self.__map_block_to_line_rule_apply_results, text_nodes))))
         text_nodes = list(reduce(lambda a,b: a + b, list(map(self.__map_line_to_start_of_line_rule, text_nodes))))
         text_nodes = self.group_ol_items_rule.apply_to_list(text_nodes)
