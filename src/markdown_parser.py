@@ -3,30 +3,74 @@ from textnode import TextNode
 import re
 from functools import reduce
 
-class MarkdownRule():
+class PerStringRule():
     def apply(self, text: str) -> list[TextNode|str]:
         pass
 
+class PerListRule():
+    def apply_to_list(self, text_nodes_and_strings: list[TextNode|str]) -> list[TextNode|str]:
+        pass
+
+
+
 # breaks markdown into either chunks or lines or code segments
-class BreakMarkdownIntoBlocksRule(MarkdownRule):
+class BreakPerStringIntoBlocksRule(PerStringRule):
     def __mapping_function(self, text: str) -> str | TextNode:
         if text[0:3] == "```" and text[-3:] == "```":
             return TextNode(text[3,-3], "code-block", None, text )
+        elif text[0:2] == "* ":
+            return TextNode(text[2:], "ul-item", None, text )
         else:
-            return text
+            ol_item_match = re.match(rf"\d{re.escape(".")}", text)
+            if ol_item_match is not None:
+                return TextNode(text[3:], "ol-item", None, text )
+        return text
 
     def apply(self, text: str) -> list[TextNode|str]:
         blocks: list[str] = re.split("```(.*)```", text, flags=re.DOTALL)
 
         return list(map(self.__mapping_function, list(filter(lambda x: len(x) > 0, blocks))))
 
-class BreakBlocksIntoLinesRule(MarkdownRule):
+class GroupListItemIntoBlocksRule(PerListRule):
+    def __init__(self, item_text_type: str, list_text_type: str):
+        self.item_text_type = item_text_type
+        self.list_text_type = list_text_type
+
+    def __group_list_items_into_block(self, markdown_list: list[TextNode]) -> TextNode:
+        raw_text: str = "\n".join(map(lambda x: x.raw_text, markdown_list))
+        text_node = TextNode("", self.list_text_type, None, raw_text)
+        text_node.children = list(markdown_list)
+        return text_node
+
+    def apply_to_list(self, text_nodes_and_strings: list[TextNode|str]) -> list[TextNode|str]:
+        text_nodes_and_strings_copy = text_nodes_and_strings.copy()
+
+        markdown_list = None
+        for i in range(len(text_nodes_and_strings)-1, -1, -1):
+            status_is_instance = isinstance(text_nodes_and_strings[i], TextNode)
+            status_text_type = text_nodes_and_strings[i].text_type == self.list_text_type
+            status_list_is_not_noe = markdown_list is not None
+            text_type = text_nodes_and_strings[i].text_type
+            if isinstance(text_nodes_and_strings[i], TextNode) and text_nodes_and_strings[i].text_type == self.item_text_type and markdown_list is None:
+                markdown_list = [text_nodes_and_strings[i]]
+            elif isinstance(text_nodes_and_strings[i], TextNode) and text_nodes_and_strings[i].text_type == self.item_text_type and markdown_list is not None:
+                markdown_list.insert(0, text_nodes_and_strings[i])
+            else:
+                if markdown_list is not None:
+                    block_node = self.__group_list_items_into_block(markdown_list)
+                    text_nodes_and_strings_copy = text_nodes_and_strings_copy[0:i+1] + [block_node] + text_nodes_and_strings_copy[i+len(markdown_list)+2:]
+                    markdown_list = None
+
+        return text_nodes_and_strings_copy
+
+
+class BreakBlocksIntoLinesRule(PerStringRule):
     def apply(self, text: str) -> list[TextNode|str]:
         lines: list[str] = text.split("\n")
 
         return lines
 
-class StartOfLineRule(MarkdownRule):
+class StartOfLineRule(PerStringRule):
     def apply(self, text: str) -> list[TextNode|str]:
         text_type = None
         image_match = None
@@ -51,7 +95,7 @@ class StartOfLineRule(MarkdownRule):
                 return [TextNode(ol_item_match[1], "ol-item", None, text)]
         return [TextNode(text, "paragraph", None, text)]
 
-class NestedRule(MarkdownRule):
+class NestedRule(PerStringRule):
     def __mapping_function(self, text: str) -> str | TextNode:
         if text.startswith("**"):
             return TextNode(text[2:-2], "bold", None, text)
@@ -140,8 +184,10 @@ class NestedRule(MarkdownRule):
 
 class MarkdownParser():
     def __init__(self):
-        self.block_rule = BreakMarkdownIntoBlocksRule()
+        self.block_rule = BreakPerStringIntoBlocksRule()
         self.line_rule = BreakBlocksIntoLinesRule()
+        self.group_ol_items_rule = GroupListItemIntoBlocksRule("ol-item", "ol")
+        self.group_ul_items_rule = GroupListItemIntoBlocksRule("ul-item", "ul")
         self.start_of_line_rule = StartOfLineRule()
         self.nested_rule = NestedRule()
 
@@ -175,7 +221,6 @@ class MarkdownParser():
         else:
             return [text_node]
 
-
     def __expand_text_node(self, text_node: TextNode) -> TextNode:
         children = self.nested_rule.apply(text_node.text)
         if len(children) == 1 and children[0].text == text_node.text:
@@ -189,6 +234,9 @@ class MarkdownParser():
         text_nodes: list[TextNode|str] = self.block_rule.apply(text)
         text_nodes = list(reduce(lambda a,b: a + b, list(map(self.__map_block_to_line_rule_apply_results, text_nodes))))
         text_nodes = list(reduce(lambda a,b: a + b, list(map(self.__map_line_to_start_of_line_rule, text_nodes))))
+        text_nodes = self.group_ol_items_rule.apply_to_list(text_nodes)
+        text_nodes = self.group_ul_items_rule.apply_to_list(text_nodes)
+
 
         for text_node in text_nodes:
             if isinstance(text_node, TextNode) and text_node.text_type == "code":
@@ -204,7 +252,7 @@ class MarkdownParser():
                 raise ValueError(f"Unexpected unprocessed string: {text_nodes_copy[i]}")
 
             if isinstance(text_nodes[i], TextNode):
-                potential_split = self.__search_for_text_node_with_children_and_replace_with_children(text_node)
+                potential_split = self.__search_for_text_node_with_children_and_replace_with_children(text_nodes[i])
                 if len(potential_split) > 1:
                     text_nodes_copy = text_nodes_copy[:i] + potential_split + text_nodes_copy[i+1:]
 

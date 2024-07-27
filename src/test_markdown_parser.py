@@ -93,5 +93,49 @@ class TestMarkdownParser(unittest.TestCase):
         self.assertEqual(text_nodes[0].children[9].text, "link")
         self.assertEqual(text_nodes[0].children[9].url, "https://boot.dev")
 
+    def test_block_from_step_4_1_blocks_split_blocks(self):
+        block = "# This is a heading\nThis is a paragraph of text. It has some **bold** and *italic* words inside of it.\n* This is the first list item in a list block\n* This is a list item\n* This is another list item"
+
+        text_nodes = self.markdown_parser.parse(block)
+
+        self.assertEqual(len(text_nodes), 3)
+
+        self.assertEqual(text_nodes[0].text_type, "h1")
+        self.assertEqual(text_nodes[0].text, "This is a heading")
+
+        self.assertEqual(text_nodes[1].text_type, "paragraph")
+        self.assertEqual(text_nodes[1].text, "This is a paragraph of text. It has some **bold** and *italic* words inside of it.")
+        self.assertEqual(len(text_nodes[1].children), 5)
+
+        self.assertEqual(text_nodes[1].children[0].text_type, "text")
+        self.assertEqual(text_nodes[1].children[0].text, "This is a paragraph of text. It has some ")
+
+        self.assertEqual(text_nodes[1].children[1].text_type, "bold")
+        self.assertEqual(text_nodes[1].children[1].text, "bold")
+
+        self.assertEqual(text_nodes[1].children[2].text_type, "text")
+        self.assertEqual(text_nodes[1].children[2].text, " and ")
+
+        self.assertEqual(text_nodes[1].children[3].text_type, "italic")
+        self.assertEqual(text_nodes[1].children[3].text, "italic")
+
+        self.assertEqual(text_nodes[1].children[4].text_type, "text")
+        self.assertEqual(text_nodes[1].children[4].text, " words inside of it.")
+
+        self.assertEqual(text_nodes[2].text_type, "ul")
+        self.assertEqual(text_nodes[2].text, "")
+        self.assertEqual(text_nodes[2].raw_text, "* This is the first list item in a list block\n* This is a list item\n* This is another list item")
+
+        self.assertEqual(text_nodes[2].children[0].text_type, "ul-item")
+        self.assertEqual(text_nodes[2].children[0].text, "This is the first list item in a list block")
+
+        self.assertEqual(text_nodes[2].children[1].text_type, "ul-item")
+        self.assertEqual(text_nodes[2].children[1].text, "This is a list item")
+
+        self.assertEqual(text_nodes[2].children[2].text_type, "ul-item")
+        self.assertEqual(text_nodes[2].children[2].text, "This is another list item")
+
+
+
 if __name__ == '__main__':
     unittest.main()
