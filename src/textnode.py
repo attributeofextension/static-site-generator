@@ -33,7 +33,7 @@ class TextNode():
             case "code-block": return "code"
             case "code": return "code"
             case "quote": return "blockquote"
-            case "text": return ""
+            case "text": return None
             case _:
                 return None
 
@@ -43,9 +43,6 @@ class TextNode():
             case "link": return {"href": self.url}
             case _:
                 return None
-
-    def can_covert_to_html_node(self):
-        return self.__get_html_tag() is not None
 
     def can_convert_to_parent_node(self):
         if len(self.children) == 0:
@@ -63,8 +60,6 @@ class TextNode():
 
 
     def to_html_node(self):
-        if not self.can_covert_to_html_node():
-            raise Exception(f"Can't convert text-type: {self.text_type} to HTML node")
         if len(self.children) > 0 and self.can_convert_to_parent_node():
             inner_html_nodes = []
             for child in self.children:
@@ -73,13 +68,9 @@ class TextNode():
                 if self.text_type == "ol" and child.text_type != "ol-item":
                     raise Exception(f"Invalid child text_type ({child.text_type}) for text_type: {self.text_type}")
 
-                if child.can_covert_to_html_node():
-                    try:
-                        html_node = child.to_html_node()
-                        inner_html_nodes.append(child.to_html_node())
-                    except Exception as e:
-                        print(e)
-                        continue
+                html_node = child.to_html_node()
+                inner_html_nodes.append(html_node)
+
             return ParentNode(inner_html_nodes, self.__get_html_tag(), self.__get_html_tag_props())
         else:
             if self.text_type == "ul":

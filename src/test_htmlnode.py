@@ -61,5 +61,6 @@ class TestDOMTree(unittest.TestCase):
         self.assertEqual(self.div_with_one_parent_node_and_one_leaf_node.to_html(), self.div_with_one_parent_node_and_one_leaf_node_to_html_expected_output)
         self.assertEqual(self.div_with_one_parent_node_and_one_leaf_node.to_html(), f"<div class=\"grandparent\">{self.div_with_two_children.to_html()}{self.p3.to_html()}</div>")
 
+
 if __name__ == "__main__":
     unittest.main()

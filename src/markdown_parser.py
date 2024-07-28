@@ -26,7 +26,7 @@ class SanitizeRule(PerStringRule):
 class BreakPerStringIntoBlocksRule(PerStringRule):
     def __mapping_function(self, text: str) -> str | TextNode:
         if text[0:3] == "```" and text[-3:] == "```":
-            return TextNode(text[3,-3], "code-block", None, text )
+            return TextNode(text[3:-3], "code-block", None, text )
         elif text[0:2] == "* ":
             return TextNode(text[2:], "ul-item", None, text )
         else:
@@ -36,9 +36,19 @@ class BreakPerStringIntoBlocksRule(PerStringRule):
         return text
 
     def apply(self, text: str) -> list[TextNode|str]:
-        blocks: list[str] = re.split("```(.*)```", text, flags=re.DOTALL)
+        blocks: list[str] = re.split(r"```.*?```", text, flags=re.DOTALL)
+        all_blocks = []
+        if len(blocks) > 1:
+            for i in range(0, len(blocks)):
+                code_block = re.search(r"```.*?```", text, flags=re.DOTALL)
+                if code_block is not None:
+                    text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+                    all_blocks.append(blocks[i])
+                    all_blocks.append(code_block[0])
+                else:
+                    all_blocks.append(blocks[i])
 
-        return list(map(self.__mapping_function, list(filter(lambda x: len(x) > 0, blocks))))
+        return list(map(self.__mapping_function, list(filter(lambda x: len(x) > 0, all_blocks))))
 
 class GroupListItemIntoBlocksRule(PerListRule):
     def __init__(self, item_text_type: str, list_text_type: str):
@@ -101,7 +111,7 @@ class StartOfLineRule(PerStringRule):
         else:
             ol_item_match = re.match(rf"\d{re.escape(".")}", text)
             if ol_item_match is not None:
-                return [TextNode(ol_item_match[1], "ol-item", None, text)]
+                return [TextNode(text[3:], "ol-item", None, text)]
         return [TextNode(text, "paragraph", None, text)]
 
 class NestedRule(PerStringRule):
@@ -119,9 +129,9 @@ class NestedRule(PerStringRule):
 
     def apply(self, text: str) -> list[TextNode]:
         lookup = {
-            "**": re.compile(f"{re.escape("**")}.*{re.escape("**")}"),
-            "*": re.compile(f"{re.escape("*")}.*{re.escape("*")}"),
-            "`": re.compile(f"`.*`"),
+            "**": re.compile(f"{re.escape("**")}.*?{re.escape("**")}"),
+            "*": re.compile(f"{re.escape("*")}.*?{re.escape("*")}"),
+            "`": re.compile(f"`.*?`"),
             "!": [
                 re.compile(r"\!\[.*?\]\(.*?\.(jpg|gif|jpeg|png)\)"),
                 re.compile(r"\!\[.*?\]"),
@@ -203,13 +213,13 @@ class MarkdownParser():
 
     def __map_block_to_line_rule_apply_results(self, block: TextNode | str) -> list[str]:
         if isinstance(block, TextNode):
-            return block
+            return [block]
         else:
             return self.line_rule.apply(block)
 
     def __map_line_to_start_of_line_rule(self, line: TextNode | str) -> list[TextNode]:
         if isinstance(line, TextNode):
-            return line
+            return [line]
         else:
             return self.start_of_line_rule.apply(line)
 
@@ -232,6 +242,12 @@ class MarkdownParser():
             return [text_node]
 
     def __expand_text_node(self, text_node: TextNode) -> TextNode:
+        if len(text_node.children) > 0:
+            new_children = []
+            for child in text_node.children:
+                new_children.append(self.__expand_text_node(child))
+            text_node.children = new_children
+            return text_node
         children = self.nested_rule.apply(text_node.text)
         if len(children) == 1 and children[0].text == text_node.text:
             return text_node
@@ -240,7 +256,7 @@ class MarkdownParser():
                 text_node.children.append(self.__expand_text_node(child))
             return text_node
 
-    def parse(self, text: str):
+    def parse(self, text: str) -> list[TextNode]:
         sanitized_text = self.sanitize_rule.apply(text)[0]
         text_nodes: list[TextNode|str] = self.block_rule.apply(sanitized_text)
         text_nodes = list(reduce(lambda a,b: a + b, list(map(self.__map_block_to_line_rule_apply_results, text_nodes))))
